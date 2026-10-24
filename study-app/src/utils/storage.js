@@ -1,4 +1,15 @@
-// Every localStorage read/write is wrapped in try/catch (private mode, full disk, etc.).
+// Every localStorage read/write is wrapped in try/catch (private mode, full disk, blocked storage).
+// Keys are versioned, for example "appsc.v1.progress". If storage is unavailable the app still works.
+export const KEYS = {
+  progress: 'appsc.v1.progress',
+  wrong: 'appsc.v1.wrong',
+  last: 'appsc.v1.last',
+  tree: 'appsc.v1.tree',
+  theme: 'appsc.v1.theme',
+  typing: 'appsc.v1.typing',
+  checklist: 'appsc.v1.checklist',
+};
+
 export function load(key, fallback) {
   try {
     const raw = localStorage.getItem(key);

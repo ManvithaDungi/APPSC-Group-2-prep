@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { quizFinished } from '../data/helpers';
-import { useProgress } from '../context/ProgressContext';
+import { LuChevronRight, LuX } from 'react-icons/lu';
+import { KEYS, load, save } from '../utils/storage';
 
 function Collapse({ open, children }) {
   return (
@@ -11,87 +11,104 @@ function Collapse({ open, children }) {
   );
 }
 
-function Arrow({ open, onClick, label }) {
-  return (
-    <button className={'arrow' + (open ? ' open' : '')} onClick={onClick} aria-expanded={open} aria-label={label}>
-      ▸
-    </button>
-  );
-}
+const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export default function Sidebar({ tab, subjectId, leafId, page, open, onClose }) {
-  const { progress } = useProgress();
-  const [exp, setExp] = useState({});
+// The topic tree. A fixed sidebar on laptops (900px and up), a slide-in drawer below that.
+// Only subjects (Ancient History ...) are links; each opens that subject's Home page.
+export default function Sidebar({ tab, groupId, leafId, open, onClose, returnFocusRef }) {
+  const [exp, setExp] = useState(() => load(KEYS.tree, {}));
+  const ref = useRef(null);
+  const wasOpen = useRef(false);
 
-  // The current page's parents always stay open.
+  // The group that holds the current page stays expanded.
   useEffect(() => {
-    setExp((e) => ({
-      ...e,
-      ...(subjectId ? { ['s:' + subjectId]: true } : {}),
-      ...(leafId ? { ['l:' + leafId]: true } : {}),
-    }));
-  }, [subjectId, leafId]);
+    if (!groupId) return;
+    setExp((e) => (e[groupId] ? e : { ...e, [groupId]: true }));
+  }, [groupId]);
+  useEffect(() => save(KEYS.tree, exp), [exp]);
 
-  const toggle = (key) => setExp((e) => ({ ...e, [key]: !e[key] }));
+  // Drawer behaviour: Escape closes, focus stays inside while open and returns to "Topics" afterwards.
+  useEffect(() => {
+    const el = ref.current;
+    if (open && el) {
+      const items = el.querySelectorAll(FOCUSABLE);
+      (items[0] || el).focus();
+    } else if (wasOpen.current) {
+      returnFocusRef?.current?.focus();
+    }
+    wasOpen.current = open;
+  }, [open, returnFocusRef]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !ref.current) return;
+      const items = [...ref.current.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const lastItem = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        lastItem.focus();
+      } else if (!e.shiftKey && document.activeElement === lastItem) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  const toggle = (id) => setExp((e) => ({ ...e, [id]: !e[id] }));
 
   return (
     <>
-      <div className={'overlay' + (open ? ' show' : '')} onClick={onClose} />
-      <aside className={'sidebar' + (open ? ' open' : '')} aria-label="Topics">
+      <div className={'overlay' + (open ? ' show' : '')} onClick={onClose} aria-hidden="true" />
+      <aside
+        ref={ref}
+        className={'sidebar' + (open ? ' open' : '')}
+        aria-label="Topics"
+        role={open ? 'dialog' : undefined}
+        aria-modal={open ? 'true' : undefined}
+        tabIndex={-1}
+      >
         <div className="sidebar-head">
           <strong>{tab.title}</strong>
-          <button className="close-drawer" onClick={onClose} aria-label="Close topics">✕</button>
+          <button type="button" className="icon-btn" onClick={onClose}>
+            <LuX size={24} className="icon" aria-hidden="true" />
+            <span className="sr-only">Close topics</span>
+          </button>
         </div>
-        {tab.subjects.map((s) => {
-          const sKey = 's:' + s.id;
-          const sOpen = !!exp[sKey];
-          const sActive = subjectId === s.id && !leafId;
-          return (
-            <div key={s.id} className="tree-group">
-              <div className={'row subject' + (sActive ? ' active' : '')}>
-                <Link to={`/${tab.id}/${s.id}`} className="row-link">{s.title}</Link>
-                <Arrow open={sOpen} onClick={() => toggle(sKey)} label={`Show or hide ${s.title}`} />
+        <nav aria-label={`${tab.title} topics`}>
+          {tab.subjects.map((g) => {
+            const isOpen = !!exp[g.id];
+            return (
+              <div key={g.id}>
+                <button type="button" className="tree-group-btn" aria-expanded={isOpen} onClick={() => toggle(g.id)}>
+                  <span>{g.title}</span>
+                  <LuChevronRight size={20} className={'icon chevron' + (isOpen ? ' open' : '')} aria-hidden="true" />
+                </button>
+                <Collapse open={isOpen}>
+                  {g.leaves.map((l) => (
+                    <Link
+                      key={l.id}
+                      to={`/${tab.id}/${g.id}/${l.id}`}
+                      className="tree-leaf"
+                      aria-current={leafId === l.id ? 'page' : undefined}
+                      tabIndex={isOpen ? 0 : -1}
+                    >
+                      {l.title}
+                    </Link>
+                  ))}
+                </Collapse>
               </div>
-              <Collapse open={sOpen}>
-                {s.leaves.map((l) => {
-                  const lKey = 'l:' + l.id;
-                  const lOpen = !!exp[lKey];
-                  const base = `/${tab.id}/${s.id}/${l.id}`;
-                  const pages = [
-                    ['', 'Home'],
-                    ['notes', 'Notes'],
-                    ['quiz', 'Quiz'],
-                    ...(l.practice ? [['practice', 'Practice']] : []),
-                  ];
-                  return (
-                    <div key={l.id} className="tree-leaf">
-                      <div className={'row leaf' + (leafId === l.id ? ' current' : '')}>
-                        <Link to={base} className="row-link">
-                          {l.title}
-                          {quizFinished(progress, l.id) && <span className="tick" title="Quiz finished"> ✓</span>}
-                        </Link>
-                        <Arrow open={lOpen} onClick={() => toggle(lKey)} label={`Show or hide pages of ${l.title}`} />
-                      </div>
-                      <Collapse open={lOpen}>
-                        <div className="pages">
-                          {pages.map(([p, label]) => (
-                            <Link
-                              key={label}
-                              to={p ? `${base}/${p}` : base}
-                              className={'page-chip' + (leafId === l.id && (page || '') === p ? ' active' : '')}
-                            >
-                              {label}
-                            </Link>
-                          ))}
-                        </div>
-                      </Collapse>
-                    </div>
-                  );
-                })}
-              </Collapse>
-            </div>
-          );
-        })}
+            );
+          })}
+        </nav>
       </aside>
     </>
   );

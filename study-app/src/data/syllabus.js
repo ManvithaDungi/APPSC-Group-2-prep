@@ -240,7 +240,7 @@ export const TABS = [
   {
     id: 'mains-1',
     title: 'Mains Paper I',
-    short: 'Mains I',
+    short: 'Paper I',
     marks: 150,
     summary: 'Social & Cultural History of AP, and Indian Constitution',
     details: '150 marks · MCQ · −1/3 negative marking',
@@ -400,7 +400,7 @@ export const TABS = [
   {
     id: 'mains-2',
     title: 'Mains Paper II',
-    short: 'Mains II',
+    short: 'Paper II',
     marks: 150,
     summary: 'Indian & AP Economy, and Science & Technology',
     details: '150 marks · MCQ · −1/3 negative marking',

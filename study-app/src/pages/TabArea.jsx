@@ -1,70 +1,81 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
-import Breadcrumb from '../components/Breadcrumb';
-import { SubjectHome, LeafHome } from './Overview';
+import SectionPage from './SectionPage';
+import LeafHome from './LeafHome';
 import NotesPage from './NotesPage';
 import QuizPage from './QuizPage';
-import TypingPage from './TypingPage';
 import NotFound from './NotFound';
-import { findLeaf, findSubject, findTab } from '../data/helpers';
+import { findGroup, findLeaf, findTab, findTopic } from '../data/helpers';
+import { CHECKLISTS } from '../data/cptChecklists';
 import { useProgress } from '../context/ProgressContext';
+import { useDrawer } from '../context/DrawerContext';
 
+const TypingPage = lazy(() => import('./TypingPage'));
+const ChecklistPage = lazy(() => import('./ChecklistPage'));
+
+// Everything under /:tabId. Routes (see APP_DESIGN_GUIDELINES.md section 2.4):
+//   /screening                                         section page
+//   /screening/indian-history/ancient-history          subject Home (lists every topic)
+//   .../ancient-history/<topic>/notes  and  /quiz      one topic
+//   .../ancient-history/all/quiz                       mixed quiz of the subject
+//   .../typing/practice, .../ms-word/checklist         CPT practice pages
 export default function TabArea() {
   const { tabId, '*': splat } = useParams();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const { setLast } = useProgress();
-  const [drawer, setDrawer] = useState(false);
+  const { open, close, setAvailable, buttonRef } = useDrawer();
 
-  const [subjectId, leafId, page] = (splat || '').split('/').filter(Boolean);
+  const [groupId, leafId, third, page] = (splat || '').split('/').filter(Boolean);
   const tab = findTab(tabId);
-  const subject = findSubject(tab, subjectId);
-  const leaf = findLeaf(subject, leafId);
+  const group = findGroup(tab, groupId);
+  const leaf = findLeaf(group, leafId);
+  const topic = leaf && third ? findTopic(leaf, third) : null;
 
-  useEffect(() => setDrawer(false), [location.pathname]);
+  // The menu button in the top bar only appears while a section page is shown.
+  const hasTree = !!tab && (!groupId || !!group) && (!leafId || !!leaf);
   useEffect(() => {
-    if (leaf) setLast(location.pathname);
-  }, [leaf, location.pathname, setLast]);
+    setAvailable(hasTree);
+    return () => setAvailable(false);
+  }, [hasTree, setAvailable]);
+  useEffect(() => close(), [pathname, close]);
+  useEffect(() => {
+    if (leaf) setLast(tab.id, pathname);
+  }, [leaf, tab, pathname, setLast]);
 
-  const valid = tab && (!subjectId || subject) && (!leafId || leaf) && (!page || ['notes', 'quiz', ...(leaf?.practice ? ['practice'] : [])].includes(page));
-  if (!valid) return <NotFound />;
+  if (!tab) return <NotFound />;
+  if (groupId && !group) return <NotFound />;
+  if (groupId && !leafId) return <Navigate to={`/${tab.id}`} replace />;
+  if (leafId && !leaf) return <NotFound />;
 
   let body;
-  if (!subject) {
-    body = (
-      <div>
-        <h1>{tab.title}</h1>
-        <p className="lead">{tab.summary}. {tab.details}.</p>
-        {tab.provisional && <div className="box changing">Check the latest CPT pattern in the official notification.</div>}
-        <div className="cards">
-          {tab.subjects.map((s) => (
-            <Link key={s.id} to={`/${tab.id}/${s.id}`} className="card">
-              <h3>{s.title}</h3>
-              <p>{s.marks} marks · {s.leaves.length} topics</p>
-            </Link>
-          ))}
-        </div>
-      </div>
-    );
-  } else if (!leaf) {
-    body = <SubjectHome tab={tab} subject={subject} />;
-  } else if (!page) {
-    body = <LeafHome tab={tab} subject={subject} leaf={leaf} />;
-  } else if (page === 'notes') {
-    body = <NotesPage tab={tab} subject={subject} leaf={leaf} />;
-  } else if (page === 'quiz') {
-    body = <QuizPage tab={tab} subject={subject} leaf={leaf} />;
+  if (!leaf) {
+    body = <SectionPage tab={tab} />;
+  } else if (!third) {
+    body = <LeafHome tab={tab} group={group} leaf={leaf} />;
+  } else if (third === 'practice' && leaf.practice && !page) {
+    body = <TypingPage tab={tab} group={group} leaf={leaf} />;
+  } else if (third === 'checklist' && CHECKLISTS[leaf.id] && !page) {
+    body = <ChecklistPage tab={tab} group={group} leaf={leaf} />;
+  } else if (third === 'all' && page === 'quiz') {
+    body = <QuizPage tab={tab} group={group} leaf={leaf} topic={null} />;
+  } else if (topic && page === 'notes') {
+    body = <NotesPage tab={tab} group={group} leaf={leaf} topic={topic} />;
+  } else if (topic && page === 'quiz') {
+    body = <QuizPage tab={tab} group={group} leaf={leaf} topic={topic} />;
   } else {
-    body = <TypingPage />;
+    return <NotFound />;
   }
 
   return (
     <div className="shell">
-      <Sidebar tab={tab} subjectId={subjectId} leafId={leafId} page={page} open={drawer} onClose={() => setDrawer(false)} />
-      <main className="content">
-        <button className="drawer-btn" onClick={() => setDrawer(true)}>☰ Topics</button>
-        <Breadcrumb tab={tab} subject={subject} leaf={leaf} page={page} />
-        <div key={location.pathname} className="fade">{body}</div>
+      <Sidebar tab={tab} groupId={groupId} leafId={leafId} open={open} onClose={close} returnFocusRef={buttonRef} />
+      <main className="content" id="main">
+        <div className="content-inner">
+          <Suspense fallback={<p className="caption">Loading…</p>}>
+            <div key={pathname} className="fade">{body}</div>
+          </Suspense>
+        </div>
       </main>
     </div>
   );

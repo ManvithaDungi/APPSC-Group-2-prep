@@ -1,0 +1,76 @@
+name: Deploy study app to GitHub Pages
+
+# Builds study-app and publishes it with GitHub Pages on every push to main.
+# One-time setup: repository Settings > Pages > Build and deployment > Source: "GitHub Actions".
+#
+# IMPORTANT: a GitHub Pages site is public to anyone with the link, even if you never share it.
+# The NCERT textbook pictures are copyrighted (see .claude/APP_DESIGN_GUIDELINES.md, section 6),
+# so by default they are LEFT OUT of the published site. To publish them anyway, create a
+# repository variable named INCLUDE_TEXTBOOK_IMAGES with the value "true"
+# (Settings > Secrets and variables > Actions > Variables).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'study-app/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: study-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: study-app/package-lock.json
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # For https://<user>.github.io/<repo>/ this is "/<repo>/"; for a custom domain it is "/".
+          VITE_BASE: ${{ steps.pages.outputs.base_path }}/
+
+      - name: Leave out textbook pictures (copyright)
+        if: ${{ vars.INCLUDE_TEXTBOOK_IMAGES != 'true' }}
+        run: rm -rf dist/images
+
+      - name: Make deep links work (single-page app fallback)
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: study-app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

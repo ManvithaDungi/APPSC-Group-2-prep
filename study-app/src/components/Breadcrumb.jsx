@@ -1,20 +1,21 @@
 import { Link } from 'react-router-dom';
+import { LuChevronRight } from 'react-icons/lu';
 
-const PAGE_NAMES = { notes: 'Notes', quiz: 'Quiz', practice: 'Practice' };
-
-export default function Breadcrumb({ tab, subject, leaf, page }) {
-  const crumbs = [{ label: tab.title, to: `/${tab.id}` }];
-  if (subject) crumbs.push({ label: subject.title, to: `/${tab.id}/${subject.id}` });
-  if (leaf) crumbs.push({ label: leaf.title, to: `/${tab.id}/${subject.id}/${leaf.id}` });
-  if (page) crumbs.push({ label: PAGE_NAMES[page] || page });
+// crumbs = [{ label, to? }]; the last one is the current page.
+export default function Breadcrumb({ crumbs }) {
   return (
     <nav className="breadcrumb" aria-label="Breadcrumb">
-      {crumbs.map((c, i) => (
-        <span key={i}>
-          {i > 0 && <span className="sep"> › </span>}
-          {c.to && i < crumbs.length - 1 ? <Link to={c.to}>{c.label}</Link> : <span className="here">{c.label}</span>}
-        </span>
-      ))}
+      <ol>
+        {crumbs.map((c, i) => {
+          const last = i === crumbs.length - 1;
+          return (
+            <li key={i}>
+              {c.to && !last ? <Link to={c.to}>{c.label}</Link> : <span aria-current={last ? 'page' : undefined}>{c.label}</span>}
+              {!last && <LuChevronRight size={16} className="icon" aria-hidden="true" />}
+            </li>
+          );
+        })}
+      </ol>
     </nav>
   );
 }

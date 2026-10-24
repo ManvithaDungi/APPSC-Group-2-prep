@@ -1,7 +1,7 @@
 # Group 2 Study
 
 A study app for the APPSC Group 2 exam (syllabus dated 27-04-2023). React 18 + Vite. No backend.
-Progress, quiz scores, text size and the last page are saved in the browser (`localStorage`).
+Progress, quiz scores, mistakes, theme and the last page are saved in the browser (`localStorage`, keys `appsc.v1.*`).
 
 ## Run it
 
@@ -10,32 +10,49 @@ npm install
 npm run dev
 ```
 
-Open the address shown (usually http://localhost:5173).
-To make a build: `npm run build`.
+Open the address shown (usually http://localhost:5173). To make a build: `npm run build`.
+
+## Design rules
+
+All design and behaviour rules are in `.claude/APP_DESIGN_GUIDELINES.md`. Read it with `INSTRUCTIONS.md` and `CONTENT_GUIDELINES.md` before changing a page. Colours and fonts are CSS variables at the top of `src/styles/global.css`.
+
+The app is private study material (NCERT images are copyrighted). `index.html` carries `noindex`; keep any public deployment password-protected.
 
 ## Folder map
 
 ```
 src/
   data/
-    syllabus.js            <- the whole navigation tree (tabs, subjects, subtopics)
-    helpers.js             <- finds content files automatically
-    typingPassages.js      <- passages for the typing practice
-    screening/*.js         <- notes + quizzes for the Screening Test
-    mains1/*.js            <- notes + quizzes for Mains Paper I
-    mains2/*.js            <- notes + quizzes for Mains Paper II
-    cpt/*.js               <- notes + quizzes for CPT
-  components/              <- TopBar, Sidebar, Breadcrumb, Quiz, NoteBlocks, Mermaid, Chart
-  pages/                   <- Dashboard, TabArea, Overview, NotesPage, QuizPage, TypingPage
+    syllabus.js        navigation tree: section > group > subject > topics (syllabus lines)
+    helpers.js         topic ids, lazy loading of content, splitting notes and quiz into topics
+    topicSections.js   which note sections ("h" blocks) cover each topic of a subject
+    quizTopics.js      which quiz questions belong to each topic of a subject
+    cptChecklists.js   CPT Part B task checklists
+    typingPassages.js  passages for typing practice
+    screening/ mains1/ mains2/ cpt/   notes and quiz data
+  components/          TopBar, ThemeToggle, Sidebar (drawer), Breadcrumb, Quiz, QuestionParts, NoteBlocks, Mermaid, Chart
+  pages/               Dashboard, SectionPage, LeafHome, NotesPage, QuizPage, TypingPage, ChecklistPage, ExamFacts
   context/ProgressContext.jsx
-  styles/global.css        <- colours are CSS variables at the top
+public/sample-data/    sample dataset for the Excel checklist
+```
+
+Routes:
+
+```
+/screening/indian-history/ancient-history                  subject Home (lists every topic)
+/screening/indian-history/ancient-history/<topic>/notes
+/screening/indian-history/ancient-history/<topic>/quiz
+/screening/indian-history/ancient-history/all/quiz         mixed quiz of the subject
+/cpt/cpt-subjects/typing/practice                          typing practice
+/cpt/cpt-subjects/ms-word/checklist                        Part B task checklist
+/exam-facts
 ```
 
 ## Add or edit notes and quiz questions
 
-1. Open (or create) a file in `src/data/<tab>/`, for example `src/data/screening/geography.js`.
-   Any `.js` file in those folders is picked up automatically (folders: `screening`, `mains1`, `mains2`, `cpt`).
-2. Export one object. Each key is a **leaf id** from `syllabus.js`:
+1. Open (or create) a file in `src/data/<section>/`. Any `.js` file there is picked up automatically. Each key is a subject id from `syllabus.js`.
+2. Notes are split into topics by their `h` headings. List which headings belong to each topic in `topicSections.js` (headings counted from 0).
+3. List which questions belong to each topic in `quizTopics.js` (questions counted from 0). A topic with an empty list shows "Questions for this topic are being added". Its questions still appear in the mixed quiz.
 
 ```js
 export default {
@@ -44,66 +61,54 @@ export default {
     quick: ['5 to 8 short revision points'],
     quiz: [
       {
-        q: 'Question text?',
+        q: 'Question text?',            // or "stem"
         options: ['A text', 'B text', 'C text', 'D text'],
-        answer: 1,            // index of the right option: 0 = first, 1 = second ...
-        explain: 'One to three lines.',
-        // optional chart or table for Data Analysis:
-        // visual: { type: 'bar', title: 'Sales', labels: ['A','B'], values: [10, 20] }
+        answer: 1,                      // index of the right option
+        explain: 'One to three lines.', // or "explanation"
+        // Optional: format ('statement' | 'assertion' | 'match' | 'chronology'),
+        // statements, assertion + reason, list1 + list2, items,
+        // shuffle: false, visual (table or chart for data questions)
       },
     ],
   },
 };
 ```
 
-Options are shuffled every attempt, so write them in any order.
+Options are shuffled each attempt, except coded or ordered options (for example "1 and 3 only", "A-2, B-4", numbers) and any question marked `shuffle: false`.
 
 ### Note blocks
 
 | `type` | Fields | Looks like |
 | --- | --- | --- |
-| `h` | `text` | Section heading |
+| `h` | `text` | Section heading (starts a new section) |
 | `h3` | `text` | Small heading |
 | `p` | `text` | Short paragraph |
 | `ul` | `items[]` | Bullet list |
 | `steps` | `items[]` | Numbered steps |
-| `remember` | `title?`, `text?`, `items?[]` | Pink "Remember This" box |
-| `mnemonic` | `title?`, `word`, `explain?` | Yellow memory-trick box |
-| `changing` | `year`, `text` | Box for data that changes (adds "Check for the latest figures.") |
-| `tip` | `text` | Blue tip box |
-| `table` | `caption?`, `head[]`, `rows[][]` | Table |
-| `timeline` | `items[{when, what}]` | Vertical line with dots |
-| `flow` | `title?`, `chart` | Flowchart in [Mermaid](https://mermaid.js.org/) text |
-| `example` | `q`, `steps[]`, `answer?` | Solved example (Mental Ability) |
+| `remember` | `title?`, `text?`, `items?[]` | "Remember this" callout |
+| `mnemonic` | `title?`, `word`, `explain?` | "Memory trick" callout |
+| `changing` | `year`, `text` | "Data as of" callout for figures that change |
+| `tip` | `text` | "Exam tip" callout |
+| `table` | `caption?`, `head[]`, `rows[][]` | Table that scrolls sideways inside its box |
+| `timeline` | `items[{when, what}]` | Dated list |
+| `flow` | `title?`, `chart` | Flowchart in [Mermaid](https://mermaid.js.org/) text (drawn top to bottom) |
+| `example` | `q`, `steps[]`, `answer?` | "Solved example" callout |
 
-`visual.type` can be `table` (`head`, `rows`), `bar`, `line` or `pie` (`labels`, `values`).
+All callouts share one style. `visual.type` for data questions can be `table` (`head`, `rows`), `bar`, `line` or `pie` (`labels`, `values`).
 
-### Current Affairs
+## Publish on GitHub Pages
 
-Use `items` instead of (or with) `notes`:
+The workflow in `.github/workflows/deploy.yml` builds this app and publishes it on every push to `main` (or by hand from the Actions tab).
 
-```js
-'national': {
-  items: [{ date: '2025-01-15', headline: '...', keyPoints: ['...'], category: 'National' }],
-  quiz: [],
-}
+One-time setup: on GitHub, open the repository's **Settings > Pages** and set **Source** to **GitHub Actions**.
+
+The site address is `https://<user>.github.io/<repository>/`. The workflow sets the sub-path for you (`VITE_BASE`), and copies `index.html` to `404.html` so links to inner pages still open.
+
+**A Pages site is public.** Anyone with the link can open it, and search engines are only asked, not forced, to skip it (`noindex`). Because the NCERT pictures are copyrighted, the workflow **leaves them out** of the published site by default; notes still show, without the pictures. To include them, add a repository variable `INCLUDE_TEXTBOOK_IMAGES` with the value `true` (Settings > Secrets and variables > Actions > Variables). Quiz scores and progress are saved only in each visitor's own browser.
+
+To test a Pages-style build locally:
+
+```bash
+VITE_BASE=/your-repo/ npm run build
+VITE_BASE=/your-repo/ npx vite preview
 ```
-
-Each item can carry `sources: [{ name, url }]` (shown as links under the item), and the leaf can carry
-`updated: 'YYYY-MM-DD'` (shown as "Last checked"). See `src/data/screening/currentAffairs.js`.
-
-### Add a new subject or subtopic
-
-Edit `src/data/syllabus.js`: add a subject under a tab, or a leaf (with `id`, `title`, `topics`) under a subject.
-Leaf ids must be unique. The sidebar, pages and URLs are created automatically.
-
-## URLs
-
-`/screening/indian-history/ancient-history/notes` follows the pattern `/<tab>/<subject>/<subtopic>/<notes|quiz>`.
-Tab ids: `screening`, `mains-1`, `mains-2`, `cpt`.
-
-## Status
-
-The app shell, navigation, quiz engine, typing practice and dashboard are complete.
-Subtopics with no data file show "Notes for this topic are being added" until content is added.
-Content written so far: see `src/data/**`.
