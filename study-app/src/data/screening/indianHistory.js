@@ -12,7 +12,7 @@ export default {
       { type: 'ul', items: [
         'Also called the **Indus Valley Civilisation**. Named after **Harappa**, where it was first identified.',
         'Known only from material remains (houses, pots, seals, tools). The script is not deciphered.',
-        'The exam usually asks about sites, town planning, crafts, trade and the end of the civilisation.',
+        'Learn the sites, town planning, crafts, trade and the end of the civilisation.',
       ] },
       { type: 'table', caption: 'Phases (NCERT Class 12, Themes I, Ch 1)', head: ['Phase', 'Dates', 'Note'], rows: [
         ['Early Harappan', '6000–2600 BCE', 'Formative phase; small settlements'],
